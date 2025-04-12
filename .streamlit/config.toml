@@ -1,0 +1,24 @@
+# .streamlit/config.toml
+
+# Theme configuration for the Streamlit Email Campaign Assistant
+[theme]
+
+# Primary accent color for interactive elements.
+primaryColor = "#4CAF50"  # Green (Material Design Green 500)
+
+# Background color for the main content area.
+backgroundColor = "#F0F2F6" # Light Gray (Keeping this light for readability)
+
+# Background color for sidebar, potentially modals, expanders etc.
+secondaryBackgroundColor = "#F0F2F6" # Red (Streamlit Red)
+
+# Text color for the main content area.
+textColor = "#31333F" # Dark Gray / Default Streamlit Text
+
+# Font family for all text in the app. Defaults to "sans serif".
+# Options: "sans serif", "serif", "monospace"
+# Or use a specific font name if installed and available to the browser.
+font = "sans serif"
+
+# You can add more theme options here if needed.
+# Refer to: https://docs.streamlit.io/develop/concepts/configuration/theming

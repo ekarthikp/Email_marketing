@@ -15,4 +15,24 @@ Note: If you are using Gmail with 2FA. Please follow as per this: [Here](https:/
 
 ## How to run:
 
-In terminal run: `streamlit run Email_marketing.py`  
+
+
+## Requirements of python packages
+
+```
+streamlit
+pandas
+io
+re
+time
+better_profanity
+word2number
+nltk
+pattern
+langchain
+pydantic
+email-validator
+xlsxwriter
+```
+
+In terminal run: `streamlit run Email_marketing.py`

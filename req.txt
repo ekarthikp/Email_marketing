@@ -1,0 +1,10 @@
+streamlit
+pandas
+better_profanity
+word2number
+nltk
+pattern
+langchain
+pydantic
+email-validator
+xlsxwriter
