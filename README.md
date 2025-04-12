@@ -17,22 +17,21 @@ Note: If you are using Gmail with 2FA. Please follow as per this: [Here](https:/
 
 
 
-## Requirements of python packages
+## Requirements of Python packages
+### How to run the req.txt to install all required packages
 
 ```
-streamlit
-pandas
-io
-re
-time
-better_profanity
-word2number
-nltk
-pattern
-langchain
-pydantic
-email-validator
-xlsxwriter
+pip install -r req.txt
+```
+### The python packages used
+```
+streamlit>=1.30.0
+pandas>=2.0.0
+python-dotenv>=1.0.0
+textblob>=0.18.0
+certifi>=2024.2.2
+langchain-google-genai>=1.0.0
+openpyxl>=3.1.0
 ```
 
 In terminal run: `streamlit run Email_marketing.py`
