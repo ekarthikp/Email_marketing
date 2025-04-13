@@ -1092,7 +1092,7 @@ def render_send_stage(config):
 def main():
     """Main function to run the Streamlit application."""
     st.set_page_config(layout="wide")
-    st.title("📧 Email Campaign Assistant (Column Agnostic)")
+    st.title("📧 Email Campaign Assistant")
     st.markdown("Upload contacts, map columns, describe your campaign, let AI analyze, confirm, generate drafts, and send!")
 
     # --- Initialize State ---
