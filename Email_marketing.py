@@ -23,11 +23,9 @@ from langchain_core.runnables import RunnablePassthrough
 
 # --- Local Knowledge Base Handler Import ---
 # Ensure knowledge_base_handler.py is in the same directory
-try:
-    from lib import knowledge_base_handler as kbh # Import the new handler file
-except ImportError:
-    st.error("Error: knowledge_base_handler.py not found. Make sure it's in the same directory.")
-    st.stop()
+
+from lib import lib.knowledge_base_handler as kbh # Import the new handler file
+
 
 
 # --- Constants ---
