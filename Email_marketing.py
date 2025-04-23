@@ -43,7 +43,7 @@ VECTORSTORE_PERSIST_DIR = kbh.DEFAULT_PERSIST_DIRECTORY
 # ==============================================================================
 # Configuration and Setup Functions
 # ==============================================================================
-campaign_topic1=""
+
 def load_and_validate_config():
     """
     Loads environment variables, validates essential ones, displays sender info
@@ -121,6 +121,7 @@ def initialize_llm_components(config):
 
 
         # 1. Campaign Analysis Chain
+        # MODIFIED: Added 'more_info' to the prompt and example JSON
         analysis_prompt_template = ChatPromptTemplate.from_messages(
              [
                 ("system", """You are an AI assistant helping to plan an email marketing campaign.
@@ -130,15 +131,15 @@ Your task is to extract the key campaign parameters:
 2.  **target_audience**: Describe the target audience based on the user's description and potential columns like 'Occupation' or 'Topics'. Be descriptive (e.g., "Software Engineers interested in AI", "Marketing roles focused on SEO", "Anyone interested in Leadership"). Use "Any" if no specific audience is targeted or if it's unclear.
 3.  **call_to_action**: What the user wants the recipient to do (e.g., "Schedule a 15-minute demo", "Visit our new landing page", "Register for the free trial"). Default to "Engage further".
 4.  **email_tone**: The desired tone of the email (e.g., "Professional and Concise", "Friendly and Engaging", "Urgent and Action-Oriented", "Informative and Educational"). Infer from the user's description. Default to "Professional".
-5.  **more_info*: More info the user needs to be included in email (e.g., "Email should be in german", "Provide the contact information like email or phone number"). Capture all the misc info required by the user.
+5.  **more_info**: Any other specific instructions or details the user mentioned that should be included or considered when drafting the email (e.g., "mention the 10% discount", "keep it under 100 words", "include contact number 555-1234"). If no other details are mentioned, leave this as an empty string "". Capture all miscellaneous requirements.
 
-Format your output ONLY as a JSON object with these exact keys: campaign_topic, target_audience, call_to_action, email_tone. Example:
+Format your output ONLY as a JSON object with these exact keys: campaign_topic, target_audience, call_to_action, email_tone, more_info. Example:
 {{
 "campaign_topic": "Launch of New AI-Powered SEO Tool",
 "target_audience": "Marketing Specialists interested in SEO & AI",
 "call_to_action": "Sign up for the waitlist",
-"email_tone": "Excited and Informative"
-"more_info: "Email should be in german"
+"email_tone": "Excited and Informative",
+"more_info": "Mention the limited-time early bird pricing."
 }}
 
 Conversation History:
@@ -151,18 +152,19 @@ Conversation History:
         st.sidebar.info("✅ Campaign Analyzer Initialized.")
 
         # 2. Email Drafting Chain
+        # MODIFIED: Added 'more_info' placeholder and instruction
         draft_prompt_template = ChatPromptTemplate.from_messages(
             [
                 ("system", """You are an AI assistant drafting personalized marketing emails.
 You will receive information about the overall campaign, a specific contact, and relevant context retrieved from a knowledge base.
 Generate a concise, polite, and personalized draft email based ONLY on the provided information.
-The email should reflect the campaign's topic and tone, and include the call to action.
+The email should reflect the campaign's topic and tone, include the call to action, and incorporate any miscellaneous instructions.
 
 **Campaign Details:**
 * Topic: {campaign_topic}
 * Tone: {email_tone}
 * Call to Action: {call_to_action}
-* Misc : {more_info}
+* Other Instructions: {more_info}
 
 **Retrieved Knowledge Context (Relevant Chunks):**
 ```
@@ -178,11 +180,11 @@ Subject: <Email Subject Line>
 * Address the contact by their First Name ({first_name}). If First Name is missing, use a polite generic greeting (e.g., "Hello,").
 * If available, subtly reference their Occupation ({occupation}) or Topic of Interest ({contact_topic}) ONLY if it directly relates to the campaign topic and retrieved context. Avoid generic mentions.
 * Leverage the **Retrieved Knowledge Context** to add specific details, benefits, or relevant points related to the campaign topic. Make the email more informative and valuable based on these retrieved chunks.
+* Incorporate any specific details or constraints mentioned in the 'Other Instructions' ({more_info}) field naturally into the email body or subject line where appropriate.
 * Maintain the specified email tone throughout the message.
 * Clearly state the call to action towards the end. Make it easy to understand what the recipient should do next.
-* Keep the email relatively brief (around 150-250 words) and professional, unless the tone specifies otherwise.
+* Keep the email relatively brief (around 150-250 words unless 'Other Instructions' specify otherwise) and professional (unless tone specifies otherwise).
 * End the email with the sender's name: {sender_name}
-* Use the {more_info} for drafting the email as per user needs.
 
 Do NOT include any other text, explanation, or preamble before "Subject:" or after the email body. Do not add placeholders like "[Link]" unless the Call to Action explicitly mentions providing a link."""),
                 ("human", """Draft an email for this contact:
@@ -192,8 +194,8 @@ Occupation: {occupation}
 Email: {contact_email}
 Topic of Interest: {contact_topic}
 
-Remember the campaign details: Topic='{campaign_topic}', Tone='{email_tone}', Call to Action='{call_to_action}'.
-Use the retrieved knowledge context to enrich the email content where appropriate.""")
+Remember the campaign details: Topic='{campaign_topic}', Tone='{email_tone}', Call to Action='{call_to_action}', Other Instructions='{more_info}'.
+Use the retrieved knowledge context and other instructions to enrich the email content where appropriate.""")
             ]
         )
         email_drafter = draft_prompt_template | llm | StrOutputParser()
@@ -202,8 +204,6 @@ Use the retrieved knowledge context to enrich the email content where appropriat
     except Exception as e:
         st.sidebar.error(f"🔴 Error initializing AI components: {e}")
         llm, embeddings_model, campaign_analyzer, email_drafter = None, None, None, None
-    
-    
 
     return llm, embeddings_model, campaign_analyzer, email_drafter
 
@@ -313,17 +313,44 @@ def filter_contacts_based_on_analysis(df, campaign_details, column_mapping):
 
     return df_filtered.to_dict('records')
 
-def prepare_download_data(filtered_contacts, drafts, send_status):
-    """ Prepares data for CSV download. """
-    if not filtered_contacts: return pd.DataFrame()
+# MODIFIED: Added campaign_details parameter
+def prepare_download_data(filtered_contacts, drafts, send_status, campaign_details):
+    """
+    Prepares data for CSV download, adding status, subject, and campaign name.
+
+    Args:
+        filtered_contacts (list): List of contact dictionaries (filtered list).
+        drafts (dict): Dictionary of drafts {index: {'subject': str, 'body': str}}.
+        send_status (dict): Dictionary of send statuses {index: 'sent'/'failed'/'pending'}.
+        campaign_details (dict): Dictionary containing campaign analysis results.
+
+    Returns:
+        pandas.DataFrame: DataFrame ready for download.
+    """
+    if not filtered_contacts:
+        return pd.DataFrame()
+
     report_data = copy.deepcopy(filtered_contacts)
+    # Get campaign name from details, default if not found
+    campaign_name = campaign_details.get('campaign_topic', 'N/A') if campaign_details else 'N/A'
+
     for idx, contact_row in enumerate(report_data):
         status = send_status.get(idx, 'pending')
-        status = 'Pending/Not Sent' if status == 'pending' else status
+        status = 'Pending/Not Sent' if status == 'pending' else status.capitalize()
         subject = drafts.get(idx, {}).get('subject', 'N/A')
+
+        # Add new columns
+        contact_row['Campaign Name'] = campaign_name
         contact_row['Send Status'] = status
         contact_row['Email Subject Drafted'] = subject
-    return pd.DataFrame(report_data)
+
+    report_df = pd.DataFrame(report_data)
+
+    # Reorder columns to put Campaign Name first
+    cols = ['Campaign Name'] + [col for col in report_df.columns if col != 'Campaign Name']
+    report_df = report_df[cols]
+
+    return report_df
 
 # ==============================================================================
 # Core Logic Functions (Email Generation)
@@ -360,13 +387,13 @@ def generate_single_draft(contact_info, campaign_details, vectorstore, email_dra
     topics = contact_info.get(column_mapping.get(APP_FIELD_TOPICS, ''), '')
 
     retrieved_context = "No specific knowledge context retrieved."
-    more_info = ""
     query = campaign_details.get('campaign_topic', '')
     if vectorstore and query:
         retrieved_context = kbh.get_relevant_context(query, vectorstore, k=4)
     elif not vectorstore: print("Vector store not available.")
     elif not query: print("Campaign topic missing for KB query.")
-    campaign_topic1=query
+
+    # MODIFIED: Include 'more_info' in the prompt input
     prompt_input = {
         'first_name': first_name or "[Not Available]",
         'last_name': last_name or "[Not Available]",
@@ -376,8 +403,8 @@ def generate_single_draft(contact_info, campaign_details, vectorstore, email_dra
         'campaign_topic': campaign_details.get('campaign_topic', 'Follow Up'),
         'email_tone': campaign_details.get('email_tone', 'Professional'),
         'call_to_action': campaign_details.get('call_to_action', 'Engage further'),
+        'more_info': campaign_details.get('more_info', ''), # Get more_info
         'sender_name': sender_name,
-        'more_info': campaign_details.get('more_info', ''),
         'retrieved_knowledge_context': retrieved_context
     }
 
@@ -415,14 +442,15 @@ def initialize_session_state():
         'column_mapping': {},
         'mapping_complete': False,
         'knowledge_base_ready': os.path.exists(VECTORSTORE_PERSIST_DIR),
-        'uploaded_knowledge_files_data': {}, # NEW: Store filename:bytes
+        'uploaded_knowledge_files_data': {}, # Store filename:bytes
         'messages': [{
             "role": "assistant",
             "content": """Hi! Let's plan your email campaign. Please tell me about:
 \n1.  **Campaign Topic:** What is the main subject?
 \n2.  **Target Audience:** Who should receive this?
 \n3.  **Call to Action:** What should they do next?
-\n(I'll use the persisted knowledge base if available!)"""
+\n4.  **Any Other Details:** Specific tone, length, points to include, etc.?
+\n(I'll use the persisted knowledge base if available!)""" # Updated initial message
         }],
         'campaign_details': None,
         'analysis_error': False,
@@ -430,7 +458,7 @@ def initialize_session_state():
         'drafts': {},
         'send_status': {},
         'selected_for_send': set(),
-        'attachment_selections': {}, # NEW: Store idx:filename selection
+        'attachment_selections': {}, # Store idx:filename selection
         'config_ok': False,
         'llm_components_ready': False,
         'embeddings_model': None
@@ -441,33 +469,23 @@ def initialize_session_state():
 
 def reset_session_state_for_new_campaign():
     """Resets session state for a new campaign, keeping config and AI components."""
-    # Keep Config and LLM/Embeddings
     keys_to_keep = [
         'config', 'config_ok', 'llm', 'embeddings_model',
         'campaign_analyzer', 'email_drafter', 'llm_components_ready',
-        'knowledge_base_ready', # Keep KB status
-        'uploaded_knowledge_files_data' # Keep KB file data for attachments
+        'knowledge_base_ready', 'uploaded_knowledge_files_data'
     ]
     kept_state = {k: st.session_state.get(k) for k in keys_to_keep}
 
-    # Clear all other keys
     all_keys = list(st.session_state.keys())
     for key in all_keys:
         if key not in keys_to_keep:
-            # Special handling for widget keys if needed
-            if key.startswith("subject_edit_") or key.startswith("body_edit_") or key.startswith("select_") or key.startswith("attach_"):
-                 pass # Let Streamlit manage widget state clearing if possible
-            else:
-                 try:
-                     del st.session_state[key]
-                 except KeyError:
-                     pass # Ignore if key already deleted
+            if not (key.startswith("subject_edit_") or key.startswith("body_edit_") or key.startswith("select_") or key.startswith("attach_")):
+                 try: del st.session_state[key]
+                 except KeyError: pass
 
-    # Re-initialize defaults (will skip kept keys)
-    initialize_session_state()
+    initialize_session_state() # Re-initialize defaults
 
-    # Restore kept state
-    for key, value in kept_state.items():
+    for key, value in kept_state.items(): # Restore kept state
         st.session_state[key] = value
 
 def update_selection_set(idx):
@@ -582,7 +600,6 @@ def render_upload_knowledge_stage():
         files_to_process = st.session_state.uploaded_knowledge_files_data
         if files_to_process:
             # Convert stored bytes back to UploadedFile-like objects for the handler
-            # This is a bit of a workaround as the handler expects file-like objects
             from io import BytesIO
             staged_file_objects = []
             for name, data in files_to_process.items():
@@ -608,10 +625,8 @@ def render_upload_knowledge_stage():
     st.markdown("---")
     if st.session_state.get('knowledge_base_ready'):
         st.info(f"✅ Knowledge base ready ('{VECTORSTORE_PERSIST_DIR}').")
-        # Display files currently considered part of the knowledge base (for attachment selection reference)
         if st.session_state.get('uploaded_knowledge_files_data'):
              st.write("Files available for attachment (from last KB build):")
-             # Use an expander to avoid clutter
              with st.expander("Available Attachment Files"):
                  st.json(list(st.session_state.uploaded_knowledge_files_data.keys()))
     else:
@@ -671,8 +686,15 @@ def render_analyze_processing_stage(campaign_analyzer):
         try:
             chat_history = format_chat_history(st.session_state.messages)
             analysis_result = campaign_analyzer.invoke({"chat_history": chat_history})
-            if not isinstance(analysis_result, dict) or not all(k in analysis_result for k in ['campaign_topic', 'target_audience', 'call_to_action', 'email_tone']):
-                 raise ValueError("AI analysis returned unexpected structure.")
+            # MODIFIED: Check for 'more_info' key as well
+            if not isinstance(analysis_result, dict) or not all(k in analysis_result for k in ['campaign_topic', 'target_audience', 'call_to_action', 'email_tone', 'more_info']):
+                 # Attempt to fix if only 'more_info' is missing
+                 if isinstance(analysis_result, dict) and 'campaign_topic' in analysis_result and 'more_info' not in analysis_result:
+                     analysis_result['more_info'] = '' # Add missing key with default value
+                     st.warning("AI analysis result was missing 'more_info' field; added default empty string.")
+                 else:
+                     raise ValueError(f"AI analysis returned unexpected structure. Keys found: {list(analysis_result.keys()) if isinstance(analysis_result, dict) else 'Not a dict'}")
+
             st.session_state.campaign_details = analysis_result
             st.session_state.filtered_contacts_list = filter_contacts_based_on_analysis(
                 st.session_state.all_contacts_df, analysis_result, st.session_state.column_mapping
@@ -695,13 +717,19 @@ def render_confirm_stage():
     if st.session_state.analysis_error: st.warning("Analysis failed. Showing contacts filtered by mailability rules.")
     elif st.session_state.campaign_details:
         st.subheader("AI Campaign Analysis Results:")
-        col1, col2 = st.columns(2); details = st.session_state.campaign_details
+        details = st.session_state.campaign_details
+        # Use columns for better layout, add More Info
+        col1, col2 = st.columns(2)
         with col1:
             st.markdown(f"**Topic:** {details.get('campaign_topic', 'N/A')}")
             st.markdown(f"**CTA:** {details.get('call_to_action', 'N/A')}")
         with col2:
             st.markdown(f"**Audience:** {details.get('target_audience', 'N/A')}")
             st.markdown(f"**Tone:** {details.get('email_tone', 'N/A')}")
+        # Display More Info if it's not empty
+        more_info = details.get('more_info', '')
+        if more_info:
+             st.markdown(f"**Other Instructions:** {more_info}")
         st.markdown("---")
     else: st.warning("Campaign details unavailable.")
 
@@ -752,9 +780,12 @@ def render_draft_stage(email_drafter, config):
 
     st.markdown(f"Generating drafts for **{len(st.session_state.filtered_contacts_list)}** recipients.")
     if st.session_state.campaign_details:
-        col1, col2 = st.columns(2); details = st.session_state.campaign_details
+        details = st.session_state.campaign_details
+        col1, col2 = st.columns(2)
         with col1: st.markdown(f"**Topic:** {details.get('campaign_topic', 'N/A')}\n\n**CTA:** {details.get('call_to_action', 'N/A')}")
         with col2: st.markdown(f"**Audience:** {details.get('target_audience', 'N/A')}\n\n**Tone:** {details.get('email_tone', 'N/A')}")
+        more_info = details.get('more_info', '')
+        if more_info: st.markdown(f"**Other Instructions:** {more_info}") # Display more_info
     else: st.warning("Campaign details missing. Using generic settings.")
 
     vectorstore = None
@@ -777,7 +808,7 @@ def render_draft_stage(email_drafter, config):
         st.session_state.selected_for_send = set(); st.session_state.attachment_selections = {}
 
         sender_name = config.get('sender_name', 'Your Name')
-        details_to_use = st.session_state.campaign_details or {'campaign_topic': 'Follow Up', 'email_tone': 'Professional', 'call_to_action': 'Engage'}
+        details_to_use = st.session_state.campaign_details or {'campaign_topic': 'Follow Up', 'email_tone': 'Professional', 'call_to_action': 'Engage', 'more_info': ''} # Add default more_info
         if not st.session_state.campaign_details: status_txt.warning("Using default campaign details.")
 
         errors = 0
@@ -811,7 +842,6 @@ def render_send_stage(config):
     if not email_col: st.error("Email column mapping missing."); st.stop()
 
     # --- Attachment Options ---
-    # Use filenames from the stored data which persists across KB builds until next build
     available_attachments = ["None"] + list(st.session_state.get('uploaded_knowledge_files_data', {}).keys())
     if len(available_attachments) > 1:
         st.info("Select attachments for individual emails below (optional).")
@@ -850,16 +880,14 @@ def render_send_stage(config):
                         contact_id = name or recipient or f'Contact {idx+1}'
                         subj = st.session_state.get(f"subject_edit_{idx}", st.session_state.drafts.get(idx, {}).get('subject', 'Error'))
                         body = st.session_state.get(f"body_edit_{idx}", st.session_state.drafts.get(idx, {}).get('body', 'Error'))
-                        # Get attachment selection for this index from the dedicated state dict
-                        selected_att_name = st.session_state.attachment_selections.get(idx, "None") # Default to None
+                        selected_att_name = st.session_state.attachment_selections.get(idx, "None")
                         att_bytes = None
                         if selected_att_name != "None":
                             att_bytes = st.session_state.uploaded_knowledge_files_data.get(selected_att_name)
-                            if not att_bytes:
-                                 st.warning(f"Attachment '{selected_att_name}' data not found for {contact_id}. Sending without attachment.")
+                            if not att_bytes: st.warning(f"Attachment '{selected_att_name}' data missing for {contact_id}.")
 
                         if "Error" in subj or "Error" in body:
-                             st.warning(f"Skipped {contact_id}: Draft content error (Index {idx}).")
+                             st.warning(f"Skipped {contact_id}: Draft error (Index {idx}).")
                              st.session_state.send_status[idx] = 'failed'; failed += 1
                         elif recipient:
                             ph.info(f"Sending to {contact_id} ({i+1}/{total})...")
@@ -917,21 +945,21 @@ def render_send_stage(config):
                     with sub_col:
                         subj = st.text_input("Subject", draft_info['subject'], key=f"subject_edit_{idx}", disabled=(not is_pending or gen_failed))
                     with att_col:
-                        # Attachment Selector - Use the dedicated state dict
+                        # Attachment Selector
                         selected_att = st.selectbox(
                             "Attachment:", options=available_attachments,
-                            key=f"attach_{idx}", # Widget key
-                            index=available_attachments.index(st.session_state.attachment_selections.get(idx, "None")), # Set default from state
+                            key=f"attach_{idx}",
+                            index=available_attachments.index(st.session_state.attachment_selections.get(idx, "None")),
                             disabled=(not is_pending or gen_failed or len(available_attachments) <= 1),
                             label_visibility="collapsed"
                         )
-                        # Update the attachment selection state when the widget changes
+                        # Update state directly via widget key access (simpler than callback here)
                         st.session_state.attachment_selections[idx] = selected_att
 
                     body_txt = st.text_area("Body", draft_info['body'], height=200, key=f"body_edit_{idx}", disabled=(not is_pending or gen_failed))
 
                     send_one_disabled = not is_pending or gen_failed or not st.session_state.config_ok or not recipient
-                    tooltip = "" # Build tooltip message
+                    tooltip = ""
                     if gen_failed: tooltip = "Draft generation failed."
                     elif not is_pending: tooltip = f"Status is {status}."
                     elif not st.session_state.config_ok: tooltip = "Config error."
@@ -939,13 +967,11 @@ def render_send_stage(config):
 
                     if st.button(f"🚀 Send Only This Email", key=f"send_one_{idx}", disabled=send_one_disabled, help=tooltip):
                         ph = st.empty(); ph.info(f"Sending to {recipient}...")
-                        # Get attachment details for this specific email from state
                         att_name = st.session_state.attachment_selections.get(idx, "None")
                         att_bytes = None
                         if att_name != "None":
                             att_bytes = st.session_state.uploaded_knowledge_files_data.get(att_name)
-                            if not att_bytes:
-                                 st.warning(f"Attachment '{att_name}' data not found. Sending without.")
+                            if not att_bytes: st.warning(f"Attachment '{att_name}' data missing.")
 
                         success = send_email_smtp(recipient, subj, body_txt, config,
                                                   attachment_filename=att_name if att_bytes else None,
@@ -965,12 +991,30 @@ def render_send_stage(config):
     st.markdown("---"); st.subheader("Campaign Finish Actions")
     col_f1, col_f2 = st.columns(2)
     with col_f1:
+        # MODIFIED: Pass campaign_details to prepare_download_data
         if st.session_state.filtered_contacts_list and st.session_state.drafts:
-            df_dl = prepare_download_data(st.session_state.filtered_contacts_list, st.session_state.drafts, st.session_state.send_status)
+            df_dl = prepare_download_data(
+                st.session_state.filtered_contacts_list,
+                st.session_state.drafts,
+                st.session_state.send_status,
+                st.session_state.campaign_details # Pass campaign details
+            )
             if not df_dl.empty:
                 try:
+                    # Generate dynamic filename including campaign topic if possible
+                    campaign_topic_safe = "campaign" # Default
+                    if st.session_state.campaign_details and st.session_state.campaign_details.get('campaign_topic'):
+                         # Basic sanitization for filename
+                         campaign_topic_safe = re.sub(r'[^\w\-]+', '_', st.session_state.campaign_details['campaign_topic'].lower()).strip('_')[:30] # Limit length
+
                     csv_data = df_dl.to_csv(index=False).encode('utf-8')
-                    st.download_button("Download Send Report (CSV)", csv_data, campaign_topic1 +'_email_report.csv', 'text/csv', key='dl_btn')
+                    st.download_button(
+                        label="Download Send Report (CSV)",
+                        data=csv_data,
+                        file_name=f'{campaign_topic_safe}_report.csv', # Use dynamic filename
+                        mime='text/csv',
+                        key='dl_btn'
+                    )
                 except Exception as e: st.error(f"Failed to generate download: {e}")
             else: st.info("No data available to download.")
         else: st.info("No contacts/drafts processed.")
