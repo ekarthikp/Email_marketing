@@ -203,7 +203,7 @@ Use the retrieved knowledge context to enrich the email content where appropriat
         st.sidebar.error(f"🔴 Error initializing AI components: {e}")
         llm, embeddings_model, campaign_analyzer, email_drafter = None, None, None, None
     
-    campaign_topic1=campaign_topic
+    
 
     return llm, embeddings_model, campaign_analyzer, email_drafter
 
@@ -366,7 +366,7 @@ def generate_single_draft(contact_info, campaign_details, vectorstore, email_dra
         retrieved_context = kbh.get_relevant_context(query, vectorstore, k=4)
     elif not vectorstore: print("Vector store not available.")
     elif not query: print("Campaign topic missing for KB query.")
-
+    campaign_topic1=query
     prompt_input = {
         'first_name': first_name or "[Not Available]",
         'last_name': last_name or "[Not Available]",
