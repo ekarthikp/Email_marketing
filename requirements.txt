@@ -10,3 +10,5 @@ streamlit
 langchain 
 langchain-community 
 faiss-cpu
+pypdf2
+pypdf
