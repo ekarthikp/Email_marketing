@@ -138,7 +138,7 @@ Format your output ONLY as a JSON object with these exact keys: campaign_topic, 
 "target_audience": "Marketing Specialists interested in SEO & AI",
 "call_to_action": "Sign up for the waitlist",
 "email_tone": "Excited and Informative"
-"more_info: ""
+"more_info: "Email should be in german"
 }}
 
 Conversation History:
@@ -358,6 +358,7 @@ def generate_single_draft(contact_info, campaign_details, vectorstore, email_dra
     topics = contact_info.get(column_mapping.get(APP_FIELD_TOPICS, ''), '')
 
     retrieved_context = "No specific knowledge context retrieved."
+    more_info = ""
     query = campaign_details.get('campaign_topic', '')
     if vectorstore and query:
         retrieved_context = kbh.get_relevant_context(query, vectorstore, k=4)
@@ -374,6 +375,7 @@ def generate_single_draft(contact_info, campaign_details, vectorstore, email_dra
         'email_tone': campaign_details.get('email_tone', 'Professional'),
         'call_to_action': campaign_details.get('call_to_action', 'Engage further'),
         'sender_name': sender_name,
+        'more_info': campaign_details.get('more_info', ''),
         'retrieved_knowledge_context': retrieved_context
     }
 
