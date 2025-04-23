@@ -968,7 +968,7 @@ def render_send_stage(config):
             if not df_dl.empty:
                 try:
                     csv_data = df_dl.to_csv(index=False).encode('utf-8')
-                    st.download_button("Download Send Report (CSV)", csv_data, 'email_report.csv', 'text/csv', key='dl_btn')
+                    st.download_button("Download Send Report (CSV)", csv_data, campaign_analyzer+'email_report.csv', 'text/csv', key='dl_btn')
                 except Exception as e: st.error(f"Failed to generate download: {e}")
             else: st.info("No data available to download.")
         else: st.info("No contacts/drafts processed.")
