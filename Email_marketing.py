@@ -17,8 +17,8 @@ from langchain_core.runnables import RunnablePassthrough
 
 # --- Local Module Imports ---
 try:
-    import knowledge_base_handler as kbh # Handles vector store
-    from email_utils import send_email_smtp # Handles sending with attachments
+    from lib import knowledge_base_handler as kbh # Handles vector store
+    from lib.email_utils import send_email_smtp # Handles sending with attachments
 except ImportError as import_err:
     st.error(f"Error importing local modules ({import_err}). Make sure 'knowledge_base_handler.py' and 'email_utils.py' are in the same directory.")
     st.stop()
