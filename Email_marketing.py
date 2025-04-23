@@ -1093,6 +1093,11 @@ def main():
              if st.session_state.mapping_complete and st.session_state.get('drafts'): render_send_stage(config)
              elif not st.session_state.mapping_complete: st.warning("Mapping incomplete."); st.session_state.app_stage = "map_columns"; time.sleep(1); st.rerun()
              else: st.warning("Drafts not generated."); st.session_state.app_stage = "draft"; time.sleep(1); st.rerun()
+ 
+        # --- ADD DISCLAIMER ---
+        st.divider() # Add a visual separator
+        st.caption("Disclaimer: Email drafts are AI-generated and should be reviewed carefully before sending.")
+
     except Exception as main_e:
          st.error(f"An unexpected error occurred: {main_e}")
          st.error("Attempting to reset. Please try starting a new campaign.")
