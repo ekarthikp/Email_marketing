@@ -43,7 +43,7 @@ VECTORSTORE_PERSIST_DIR = kbh.DEFAULT_PERSIST_DIRECTORY
 # ==============================================================================
 # Configuration and Setup Functions
 # ==============================================================================
-
+campaign_topic1=""
 def load_and_validate_config():
     """
     Loads environment variables, validates essential ones, displays sender info
@@ -202,6 +202,8 @@ Use the retrieved knowledge context to enrich the email content where appropriat
     except Exception as e:
         st.sidebar.error(f"🔴 Error initializing AI components: {e}")
         llm, embeddings_model, campaign_analyzer, email_drafter = None, None, None, None
+    
+    campaign_topic1=campaign_topic
 
     return llm, embeddings_model, campaign_analyzer, email_drafter
 
@@ -968,7 +970,7 @@ def render_send_stage(config):
             if not df_dl.empty:
                 try:
                     csv_data = df_dl.to_csv(index=False).encode('utf-8')
-                    st.download_button("Download Send Report (CSV)", csv_data, campaign_topic +'_email_report.csv', 'text/csv', key='dl_btn')
+                    st.download_button("Download Send Report (CSV)", csv_data, campaign_topic1 +'_email_report.csv', 'text/csv', key='dl_btn')
                 except Exception as e: st.error(f"Failed to generate download: {e}")
             else: st.info("No data available to download.")
         else: st.info("No contacts/drafts processed.")
